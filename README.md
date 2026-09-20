@@ -4,10 +4,9 @@ A visual layout creator for [TournamentStreamHelper](https://github.com/joaorb64
 overlays — build new layouts, restyle existing ones, and write them straight
 into your TSH install.
 
-> **Status: early.** The editor, emitters and export path work end to end. Four
-> of the ten smart components still render placeholders, and layout import has
-> its backend but not its UI. See [docs/DESIGN.md](docs/DESIGN.md#6-status) for
-> exactly what is and isn't done.
+> **Status: early.** The editor, emitters, import and export all work end to
+> end. Four of the ten smart components still render placeholders. See
+> [docs/DESIGN.md](docs/DESIGN.md#7-status) for exactly what is and isn't done.
 
 ## What it does
 
@@ -27,6 +26,7 @@ into your TSH install.
 - **Readable output.** Emitted HTML, CSS and JS follow the conventions of the
   official layouts and are meant to be hand-edited afterwards. You can watch
   them being generated in the Code tab as you work.
+- **Import and retheme existing layouts** — see below.
 
 ## Stack and Free
 
@@ -40,6 +40,22 @@ difference between an overlay that survives a real bracket and one that doesn't:
   backdrops and one-off designs, but a blank field leaves a hole.
 
 Anything holding live player data wants Stack.
+
+## Importing an existing layout
+
+**Import** in the Layouts panel lists everything in your TSH `/layout/` folder.
+An imported layout keeps its original HTML, CSS and JavaScript exactly as
+written — nothing here can safely turn a hand-written stylesheet back into
+movable elements, so it doesn't pretend to.
+
+What you get instead is retheming. Most TSH layouts define no CSS variables at
+all (only 4 of the 41 in the official repo do), so the editor finds their
+**hardcoded colours** and lets you point each one at a token in your pack.
+Map `#38ffb7` to your accent and every rule using it follows your theme.
+Fonts and any existing variables are editable the same way.
+
+Everything you don't remap round-trips byte-for-byte. All 41 official layouts
+were imported and re-exported unchanged as a check.
 
 ## Getting started
 

@@ -12,6 +12,7 @@ import type { TemplateId } from '@shared/model/factory';
 import { createLayoutFromTemplate } from '@shared/model/factory';
 import { sanitizeFolderName } from '@shared/model/pack';
 import { useEditor } from '../store/editor';
+import { ImportDialog } from './ImportDialog';
 
 export function LeftPane(): JSX.Element {
   return (
@@ -29,6 +30,7 @@ function LayoutList(): JSX.Element {
   const select = useEditor((s) => s.selectLayout);
   const remove = useEditor((s) => s.removeLayout);
   const [adding, setAdding] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   return (
     <div className="section">
@@ -37,6 +39,13 @@ function LayoutList(): JSX.Element {
         <div className="toolbar__spacer" />
         <button className="btn btn--sm" onClick={() => setAdding(true)}>
           + Add
+        </button>
+        <button
+          className="btn btn--sm"
+          title="Bring in an existing layout from your TSH install"
+          onClick={() => setImporting(true)}
+        >
+          Import
         </button>
       </div>
       <ul className="list">
@@ -71,6 +80,7 @@ function LayoutList(): JSX.Element {
         ))}
       </ul>
       {adding ? <NewLayoutDialog onClose={() => setAdding(false)} /> : null}
+      {importing ? <ImportDialog onClose={() => setImporting(false)} /> : null}
     </div>
   );
 }
@@ -154,7 +164,12 @@ function VariantList(): JSX.Element | null {
         <div className="toolbar__spacer" />
         <button
           className="btn btn--sm"
-          title="A variant shares this layout's structure and script, with its own colours and tweaks"
+          disabled={layout.tier === 'imported'}
+          title={
+            layout.tier === 'imported'
+              ? "An imported layout's variants come from the .html files it already has"
+              : "A variant shares this layout's structure and script, with its own colours and tweaks"
+          }
           onClick={() => add(`Variant ${layout.variants.length + 1}`)}
         >
           + Add
@@ -171,7 +186,7 @@ function VariantList(): JSX.Element | null {
               {variant.name}
             </span>
             <span className="list__badge">{variant.fileName}</span>
-            {index > 0 ? (
+            {index > 0 && layout.tier !== 'imported' ? (
               <button
                 className="btn btn--sm btn--danger"
                 onClick={(e) => {
@@ -198,7 +213,8 @@ function LayerTree(): JSX.Element | null {
   const duplicate = useEditor((s) => s.duplicateNode);
   const [showAdd, setShowAdd] = useState(false);
 
-  if (!layout) return null;
+  // An imported layout has no element model, so there are no layers to list.
+  if (!layout || layout.tier === 'imported') return null;
 
   const targetParent = (): string | undefined => {
     // Add into the selected container, or next to the selected element.

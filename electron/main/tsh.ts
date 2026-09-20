@@ -153,6 +153,9 @@ export async function readLayout(layoutPath: string): Promise<ImportedLayoutFile
   };
 
   const settings = await readOptional('settings.json');
+  // Official layouts ship a preview render; it's the only visual the editor
+  // can show for an imported layout, which it cannot draw from a model.
+  const preview = files.find((f) => /_preview\.png$/i.test(f));
 
   return {
     folderName: layoutPath.split(/[\\/]/).pop() ?? '',
@@ -160,6 +163,7 @@ export async function readLayout(layoutPath: string): Promise<ImportedLayoutFile
     js: await readOptional('index.js'),
     html,
     settings: settings || undefined,
+    previewImage: preview ? join(layoutPath, preview) : undefined,
   };
 }
 

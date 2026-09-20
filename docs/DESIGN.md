@@ -14,7 +14,8 @@ picking the project up.
 Before any of the design below makes sense, the target format:
 
 **Structure.** The [official layouts repo](https://github.com/TournamentStreamHelper/TournamentStreamHelper-layouts)
-has 29 layout folders holding 128 HTML files. One folder is a layout *family*:
+has 41 layout folders holding 126 HTML files (29 of those folders have an
+`index.html`; the rest are named for their variants). One folder is a layout *family*:
 `index.html` plus variants (`index_3d.html`, `losers_only.html`, `t1_p1.html`)
 that share a single `index.css` and `index.js` and differ by a class on
 `<body>` — `.ssbu`, `.fgc`, `.sf6.online`. Each folder also carries
@@ -80,7 +81,7 @@ Everything is a fixed canvas (usually 1920×1080), `overflow: hidden`, and
 | Simplified CSS | **Plain-language panels with an Advanced toggle** revealing real property names and a per-element raw-CSS box. |
 | Preview data | **Bundled mock scenarios *and* optional live socket.io** to a running TSH. |
 | Output | Writes into the TSH `/layout/` folder, referencing shared `../include/` and `../main.css`; zip export for sharing. |
-| Import | **Tiered** — full editing for Creator-authored layouts, tokens/colours/fonts/animation only for hand-written ones. |
+| Import | **Tiered** — full editing for Creator-authored layouts; variables, colour promotion and font swaps for hand-written ones (§4). |
 
 ---
 
@@ -117,7 +118,75 @@ ships in Stack mode for precisely this reason.
 
 ---
 
-## 4. Architecture
+## 4. The imported tier
+
+Import keeps a layout's original HTML, CSS and JavaScript byte-for-byte and
+limits the editor to **value substitutions** re-applied to that pristine source
+on every export. Nothing attempts to reverse a stylesheet into the element
+model.
+
+### Why colour promotion, not just token editing
+
+The obvious design — "import reads the layout's `:root` block, you edit those
+variables" — turns out to be nearly worthless against the real corpus. Of the
+41 layout folders in the official repo:
+
+| Layouts with a `:root` block | 4 |
+| --- | --- |
+| Layouts with **no** CSS variables at all | 37 |
+
+That includes every VGBootCamp skin, `scoreboard_simple`, and the whole
+`versus_screen` family. Token-only editing would present an empty panel for
+90% of imports.
+
+So the editor also finds **hardcoded colour literals** and lets you point each
+one at a pack token. `#38ffb7` becomes `var(--p1-score-bg-color)` everywhere it
+appears, and the layout starts following your theme. That is the operation
+someone actually wants when they import a scoreboard they like.
+
+Colours are grouped by canonical form, so `#FFF`, `#fff` and `#ffffff` are one
+entry. Greys and low-alpha values — shadows, hairlines, scrims — are flagged
+`likelyIncidental` and collapsed behind a disclosure, because they dominate
+these stylesheets by count and drown out the three or four colours that carry
+brand identity.
+
+### How edits are applied
+
+`analyzeCss()` returns source **spans** for every token declaration, colour
+literal and `font-family` value. Spans are re-derived from the pristine source
+on every emit — never stored — so they cannot go stale. All edits are collected
+and applied in one right-to-left pass; overlapping edits throw rather than
+silently producing corrupt CSS.
+
+Colours inside `:root` blocks and inside comments are excluded from the colour
+list: the first are already tokens, and the second aren't real declarations.
+
+### Tokens must be materialised, not linked
+
+An imported layout's HTML is preserved as authored, so it never links the
+pack's `theme.css`. A promoted colour pointing at `var(--my-brand)` would
+therefore resolve to nothing.
+
+Rather than injecting a `<link>` — which would break the round-trip guarantee
+on a file we don't own — the emitter writes every token a substitution
+references into the layout's *own* `:root` block, resolved from the pack theme.
+A token the stylesheet already declares is left alone, and one the theme can't
+resolve is skipped rather than emitted as an empty declaration.
+
+### Verification
+
+Every one of the 41 real layout folders was imported and re-emitted with no
+edits: **41 byte-identical, 0 drifted, 0 crashed.** That round-trip is the
+guarantee the tier rests on, and `import.test.ts` asserts it on a fixture
+carrying the shapes that make it hard — shorthand hex, 8-digit hex with alpha,
+spaced `rgba()`, `@font-face`, and a colour inside a comment.
+
+Variants come from the HTML files, with body classes read from source, so
+`scoreboard/` imports as 19 variants and `character_line/` as 11.
+
+---
+
+## 5. Architecture
 
 ```
 electron/
@@ -171,7 +240,7 @@ containing nothing but keys we would have written.
 
 ---
 
-## 5. Token layering
+## 6. Token layering
 
 Three layers, later winning:
 
@@ -189,7 +258,7 @@ emits nothing.
 
 ---
 
-## 6. Status
+## 7. Status
 
 ### Working
 
@@ -203,7 +272,10 @@ emits nothing.
 - Export: write into TSH `/layout/` with overwrite protection, or zip
 - TSH auto-detection and socket.io live data with delta handling
 - Six mock scenarios including overlong names, Japanese names and missing data
-- 24 emitter tests, including parse-checks on all generated JavaScript
+- Layout import: browse the TSH install, import with variants and canvas
+  detected, retheme via variables, colour promotion and font swaps
+- 52 tests — emitter (including parse-checks on all generated JavaScript) and
+  import (including byte-identical round-trip)
 
 ### Components
 
@@ -219,9 +291,6 @@ another options form.
 
 ### Not built yet
 
-- **Layout import.** The main-process side (`listLayouts`, `readLayout`) and
-  the imported-tier emitter both exist and are tested; the UI to drive them,
-  and the CSS parser that extracts a hand-written layout's tokens, do not.
 - **Live preview iframe.** Mock-data preview runs on the canvas today. Rendering
   the real emitted layout against a running TSH needs a preview window pointed
   at the install — the plumbing (`connectLive`, delta application) is done.
@@ -243,12 +312,14 @@ another options form.
 
 ---
 
-## 7. Roadmap
+## 8. Roadmap
 
-1. **Import UI** — the piece with the clearest user demand, and the half that
-   isn't built is the smaller half.
-2. **Bracket component** — the most-requested data-driven layout.
-3. **Live preview window** against a running TSH.
-4. **Remaining components** — top 8, stage striking, map.
+1. **Bracket component** — the most-requested data-driven layout.
+2. **Live preview window** against a running TSH.
+3. **Remaining components** — top 8, stage striking, map.
+4. **Import: animation parameters.** Durations and eases could be substituted
+   the same way colours are, by span. Deferred because GSAP call sites vary
+   more than CSS values do, and a bad substitution breaks a script rather than
+   just a colour.
 5. **Upstream contribution output** — README and `*_preview.png` generation, so
    a pack can be submitted to the official repo without hand work.

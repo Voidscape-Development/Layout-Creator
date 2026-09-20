@@ -8,7 +8,7 @@
 
 import { useMemo, useState } from 'react';
 import { emitCss, emitHtml, emitJs } from '@shared/emit';
-import { packFolder } from '@shared/emit';
+import { packFolder, rewriteImportedCss } from '@shared/emit';
 import { useEditor } from '../store/editor';
 
 type Tab = 'html' | 'css' | 'js';
@@ -24,7 +24,9 @@ export function CodePanel(): JSX.Element {
     if (layout.tier === 'imported') {
       const imported = layout.importedSource;
       if (!imported) return '// No source captured for this imported layout.';
-      if (tab === 'css') return imported.css;
+      // The CSS is shown *as it will be exported*, with token, colour and font
+      // substitutions applied, so the effect of a remap is visible here.
+      if (tab === 'css') return rewriteImportedCss(layout, imported.css, pack.theme);
       if (tab === 'js') return imported.js;
       return imported.html[variant.fileName] ?? '';
     }

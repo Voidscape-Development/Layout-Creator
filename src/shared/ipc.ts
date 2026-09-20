@@ -53,6 +53,8 @@ export interface ImportedLayoutFiles {
   js: string;
   html: Record<string, string>;
   settings?: string;
+  /** Absolute path to a `*_preview.png`, when the layout ships one. */
+  previewImage?: string;
 }
 
 export interface LiveStatus {

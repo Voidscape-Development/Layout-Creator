@@ -28,6 +28,8 @@ import { emitJs } from './js';
 import { COMPONENTS_RUNTIME, UNIMPLEMENTED_COMPONENTS } from './runtime';
 import { emitThemeCss } from './theme';
 import { walk } from '../model/nodes';
+import { analyzeCss, applyEdits } from '../import/css';
+import type { CssEdit } from '../import/css';
 
 export interface EmittedFile {
   /** Path relative to the TSH `/layout/` directory. */
@@ -59,7 +61,7 @@ export function emitLayout(pack: Pack, layout: Layout): EmitResult {
   if (layout.tier === 'imported') {
     // Imported layouts are re-emitted from their original source with only the
     // modelled parts substituted, rather than regenerated from scratch.
-    return emitImportedLayout(layout);
+    return emitImportedLayout(layout, pack.theme);
   }
 
   for (const variant of layout.variants) {
@@ -94,7 +96,10 @@ export function emitLayout(pack: Pack, layout: Layout): EmitResult {
  * Everything else round-trips byte-for-byte, which is the promise the
  * imported tier makes.
  */
-function emitImportedLayout(layout: Layout): EmitResult {
+function emitImportedLayout(
+  layout: Layout,
+  themeTokens: Record<string, string>,
+): EmitResult {
   const files: EmittedFile[] = [];
   const warnings: string[] = [];
   const dir = sanitizeFolderName(layout.folderName);
@@ -111,7 +116,7 @@ function emitImportedLayout(layout: Layout): EmitResult {
 
   files.push({
     path: `${dir}/index.css`,
-    contents: replaceRootBlock(source.css, layout.tokenOverrides),
+    contents: rewriteImportedCss(layout, source.css, themeTokens),
     kind: 'css',
   });
   files.push({ path: `${dir}/index.js`, contents: source.js, kind: 'js' });
@@ -120,25 +125,118 @@ function emitImportedLayout(layout: Layout): EmitResult {
   }
 
   warnings.push(
-    `"${layout.name}" was imported, so only its design tokens are rewritten — structure, CSS and scripts are preserved as authored.`,
+    `"${layout.name}" was imported, so only its tokens, colours and fonts are rewritten — structure, layout rules and scripts are preserved as authored.`,
   );
   return { files, warnings };
 }
 
 /**
- * Replace the first `:root { … }` block's declarations with the layout's
- * tokens, leaving the rest of the stylesheet untouched. Appends a block if the
- * stylesheet has none.
+ * Token names referenced by the layout's substitutions, e.g. the `--my-brand`
+ * in a `var(--my-brand)` colour mapping.
  */
-function replaceRootBlock(css: string, tokens: Record<string, string>): string {
-  const entries = Object.entries(tokens);
-  if (!entries.length) return css;
-  const body = entries.map(([name, value]) => `  ${name}: ${value};`).join('\n');
-  const block = `:root {\n${body}\n}`;
+function referencedTokens(layout: Layout): string[] {
+  const values = [
+    ...Object.values(layout.importedEdits?.colorMappings ?? {}),
+    ...Object.values(layout.importedEdits?.fontMappings ?? {}),
+  ];
+  const names = new Set<string>();
+  for (const value of values) {
+    for (const match of value.matchAll(/var\(\s*(--[A-Za-z0-9-]+)\s*\)/g)) {
+      if (match[1]) names.add(match[1]);
+    }
+  }
+  return [...names];
+}
 
-  const match = /:root\s*\{[^}]*\}/.exec(css);
-  if (!match) return `${block}\n\n${css}`;
-  return css.slice(0, match.index) + block + css.slice(match.index + match[0].length);
+/**
+ * Rewrite an imported stylesheet.
+ *
+ * Every edit is a span substitution against the pristine source, collected
+ * into one right-to-left pass. Spans are re-derived here rather than stored,
+ * so they can never go stale relative to the text they describe.
+ *
+ * `themeTokens` carries the pack theme. It matters because an imported
+ * layout's HTML is preserved as authored and therefore never links the pack's
+ * `theme.css` — so any token a substitution references has to be materialised
+ * into this stylesheet's own `:root`, or the promoted value would resolve to
+ * nothing. Doing it here rather than by editing the HTML is what keeps the
+ * round-trip guarantee intact for every file we don't own.
+ */
+export function rewriteImportedCss(
+  layout: Layout,
+  css: string,
+  themeTokens: Record<string, string> = {},
+): string {
+  const analysis = analyzeCss(css);
+  const edits: CssEdit[] = [];
+
+  // 1. Token declarations. Existing ones are rewritten in place so surrounding
+  //    formatting and comments survive; genuinely new tokens are appended to
+  //    the root block, or given one if the stylesheet has none.
+  const tokens = { ...layout.tokenOverrides };
+
+  // Materialise referenced tokens the stylesheet doesn't already carry. The
+  // layout's own override wins, then the pack theme; an unresolvable name is
+  // skipped rather than emitted as an empty declaration.
+  for (const name of referencedTokens(layout)) {
+    if (tokens[name] !== undefined) continue;
+    if (analysis.tokens.some((t) => t.name === name)) continue;
+    const value = themeTokens[name];
+    if (value !== undefined) tokens[name] = value;
+  }
+  for (const decl of analysis.tokens) {
+    const value = tokens[decl.name];
+    if (value === undefined || value === decl.value) {
+      delete tokens[decl.name];
+      continue;
+    }
+    edits.push({
+      start: decl.start,
+      end: decl.end,
+      replacement: `${decl.name}: ${value};`,
+    });
+    delete tokens[decl.name];
+  }
+
+  const added = Object.entries(tokens);
+  let prefix = '';
+  if (added.length) {
+    const body = added.map(([name, value]) => `  ${name}: ${value};`).join('\n');
+    if (analysis.rootBlock) {
+      // Insert before the closing brace of the existing block.
+      edits.push({
+        start: analysis.rootBlock.end - 1,
+        end: analysis.rootBlock.end,
+        replacement: `${body}\n}`,
+      });
+    } else {
+      prefix = `/* Tokens added by TSH Layout Creator */\n:root {\n${body}\n}\n\n`;
+    }
+  }
+
+  // 2. Colour promotions — the substitution that makes importing worthwhile.
+  const colorMappings = layout.importedEdits?.colorMappings ?? {};
+  for (const group of analysis.colors) {
+    const replacement = colorMappings[group.normalized];
+    if (!replacement) continue;
+    for (const occurrence of group.occurrences) {
+      edits.push({
+        start: occurrence.start,
+        end: occurrence.end,
+        replacement,
+      });
+    }
+  }
+
+  // 3. Font substitutions.
+  const fontMappings = layout.importedEdits?.fontMappings ?? {};
+  for (const font of analysis.fonts) {
+    const replacement = fontMappings[font.value];
+    if (!replacement) continue;
+    edits.push({ start: font.start, end: font.end, replacement });
+  }
+
+  return prefix + applyEdits(css, edits);
 }
 
 function layoutWarnings(layout: Layout): string[] {

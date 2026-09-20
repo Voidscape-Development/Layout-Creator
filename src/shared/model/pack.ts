@@ -103,6 +103,8 @@ export interface Layout {
    * understanding.
    */
   importedSource?: ImportedSource;
+  /** Value substitutions applied to `importedSource` on export. */
+  importedEdits?: ImportedEdits;
   notes?: string;
 }
 
@@ -110,8 +112,32 @@ export interface ImportedSource {
   css: string;
   js: string;
   html: Record<string, string>;
-  /** Byte-level fidelity check on re-import. */
+  /** Digest of the files as read, so a change on disk can be detected. */
   hash: string;
+  /** Absolute path to the layout's shipped preview render, if it has one. */
+  previewImage?: string;
+}
+
+/**
+ * Edits the editor can safely make to a hand-written layout.
+ *
+ * Each is expressed as a value substitution rather than a structural change,
+ * and is re-applied to the pristine `ImportedSource` on every export. Anything
+ * not named here round-trips untouched.
+ */
+export interface ImportedEdits {
+  /**
+   * Canonical colour literal -> replacement, usually `var(--token)`.
+   * This is the operation that makes importing worthwhile: most official
+   * layouts declare no tokens at all and hardcode their palette.
+   */
+  colorMappings: Record<string, string>;
+  /** Original `font-family` value -> replacement. */
+  fontMappings: Record<string, string>;
+}
+
+export function defaultImportedEdits(): ImportedEdits {
+  return { colorMappings: {}, fontMappings: {} };
 }
 
 export interface FontRef {

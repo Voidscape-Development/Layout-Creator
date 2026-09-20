@@ -16,13 +16,17 @@ import { AnimationPanel } from './components/AnimationPanel';
 import { Inspector } from './components/Inspector';
 import { ThemePanel } from './components/ThemePanel';
 import { CodePanel } from './components/CodePanel';
+import { ImportedPanel } from './components/ImportedPanel';
+import { ImportedCanvas } from './components/ImportedCanvas';
 
 type RightTab = 'inspector' | 'theme' | 'code';
 
 export function App(): JSX.Element {
   const pack = useEditor((s) => s.pack);
+  const layout = useEditor((s) => s.layout());
   const setPack = useEditor((s) => s.setPack);
   const [rightTab, setRightTab] = useState<RightTab>('inspector');
+  const imported = layout?.tier === 'imported';
 
   // A brand-new session starts with something on the canvas rather than an
   // empty document — there is nothing to learn from a blank 1920x1080 box.
@@ -42,8 +46,10 @@ export function App(): JSX.Element {
         <LeftPane />
 
         <div className="canvas-wrap">
-          <Canvas />
-          <AnimationPanel />
+          {imported ? <ImportedCanvas /> : <Canvas />}
+          {/* An imported layout's GSAP timeline lives in its own script, which
+              the editor doesn't model, so there is nothing to show here. */}
+          {imported ? null : <AnimationPanel />}
         </div>
 
         <div className="pane pane--right">
@@ -55,14 +61,18 @@ export function App(): JSX.Element {
                 onClick={() => setRightTab(tab)}
               >
                 {tab === 'inspector'
-                  ? 'Element'
+                  ? imported
+                    ? 'Layout'
+                    : 'Element'
                   : tab === 'theme'
                     ? 'Theme'
                     : 'Code'}
               </button>
             ))}
           </div>
-          {rightTab === 'inspector' ? <Inspector /> : null}
+          {rightTab === 'inspector' ? (
+            layout?.tier === 'imported' ? <ImportedPanel /> : <Inspector />
+          ) : null}
           {rightTab === 'theme' ? <ThemePanel /> : null}
           {rightTab === 'code' ? <CodePanel /> : null}
         </div>
