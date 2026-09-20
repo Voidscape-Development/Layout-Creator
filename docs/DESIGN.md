@@ -252,7 +252,50 @@ user would have rebuilt the same baseline by hand.
 
 ---
 
-## 6. Architecture
+## 6. The top 8 component
+
+A placement grid, not a tree. It reads `player_list.slot`, which TSH orders by
+finish, so the entrant's placement comes from its *position* rather than from
+any stored field.
+
+### Placements are computed, not copied
+
+The official layout hardcodes the sequence, with a `// TODO: Standings
+formula` comment beside it:
+
+```js
+Array(1, 2, 3, 4, 5, 5, 7, 7, 17, 17, 17, 17, 21, 21, 21, 21)[i]
+```
+
+That array is wrong past 8th. Positions 9–12 place **9th** and 13–16 place
+**13th**; the 17s and 21s don't correspond to any bracket. It rarely bites
+because most layouts stop at eight, but this component offers a place count up
+to 32, so it generates the sequence instead:
+
+- **Double elimination** — `1, 2, 3, 4`, then tied blocks whose size doubles
+  every second block: `5,5`, `7,7`, `9×4`, `13×4`, `17×8`, `25×8`…
+- **Single elimination** — every loser of a round ties: `1, 2`, `3×2`, `5×4`,
+  `9×8`…
+
+`top_8_single_elim`'s array is correct, and the generated single-elim sequence
+matches it.
+
+### Tiers
+
+Without `sameSize` the grid is a podium: the winner alone in a row that grows
+1.5×, the next three in a second row, the rest in a third. A lone flex child
+fills its row, so `--top8-entry-max` caps a card's width and the row centres —
+otherwise first place stretched across the full 1760px.
+
+### A hook worth sharing
+
+Character art was previously mounted by looking for `.gallery_character`.
+Top 8 needed the same thing, so the hook is now keyed off a
+`data-tsh-character` attribute and every component gets it for free.
+
+---
+
+## 7. Architecture
 
 ```
 electron/
@@ -306,7 +349,7 @@ containing nothing but keys we would have written.
 
 ---
 
-## 7. Token layering
+## 8. Token layering
 
 Three layers, later winning:
 
@@ -324,7 +367,7 @@ emits nothing.
 
 ---
 
-## 8. Status
+## 9. Status
 
 ### Working
 
@@ -342,21 +385,25 @@ emits nothing.
   detected, retheme via variables, colour promotion and font swaps
 - Bracket component: signed rounds, byes, TBD slots, grand-final reset,
   measured SVG connectors, auto-fit row heights
+- Top 8 component: computed placement sequences for single and double
+  elimination, tiered podium, doubles entrants
 - Component default styles shipped as `components.css`
-- 74 tests — emitter (parse-checks on all generated JavaScript), import
-  (byte-identical round-trip) and bracket (the runtime evaluated and driven
-  against TSH-shaped data)
+- 87 tests — emitter (parse-checks on all generated JavaScript), import
+  (byte-identical round-trip), bracket and top 8 (the runtime evaluated and
+  driven against TSH-shaped data)
 
 ### Components
 
 | Implemented | Placeholder |
 | --- | --- |
-| `bracket`, `set_list`, `stream_queue`, `top_n_list`, `commentators`, `player_list`, `character_gallery` | `top_8`, `stage_strike`, `map` |
+| `bracket`, `top_8`, `set_list`, `stream_queue`, `top_n_list`, `commentators`, `player_list`, `character_gallery` | `stage_strike`, `map` |
 
-The three placeholders render a visible "not implemented yet" box and log a
+The two placeholders render a visible "not implemented yet" box and log a
 console warning, and exporting a layout that uses one produces an export
 warning. They need genuine generation logic — ruleset-driven strike state,
-Leaflet for the map — rather than another options form.
+Leaflet for the map — rather than another options form. A test asserts the
+placeholder set stays in step with the renderers, so implementing one without
+delisting it fails the build.
 
 ### Not built yet
 
@@ -381,11 +428,11 @@ Leaflet for the map — rather than another options form.
 
 ---
 
-## 9. Roadmap
+## 10. Roadmap
 
 1. **Live preview window** against a running TSH.
-2. **Remaining components** — top 8, stage striking, map. Top 8 can reuse most
-   of the bracket's measurement and slot handling.
+2. **Remaining components** — stage striking and the map. The map needs
+   Leaflet bundled into the pack, which no component has needed yet.
 4. **Import: animation parameters.** Durations and eases could be substituted
    the same way colours are, by span. Deferred because GSAP call sites vary
    more than CSS values do, and a bad substitution breaks a script rather than

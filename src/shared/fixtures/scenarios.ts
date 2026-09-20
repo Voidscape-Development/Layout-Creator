@@ -80,6 +80,7 @@ interface StateSeed {
   teams: [TeamSeed, TeamSeed];
   commentary?: { name: string; pronoun?: string; twitter?: string; real_name?: string }[];
   bracket?: Record<string, unknown>;
+  playerList?: Record<string, unknown>;
 }
 
 /* ── Bracket ────────────────────────────────────────────────────────────── */
@@ -93,6 +94,31 @@ function emptyBracket(): Record<string, unknown> {
 
 function bracketPlayer(name: string, country?: { code: string; asset: string }) {
   return { player: { '1': player({ name, ...(country ? { country } : {}) }) } };
+}
+
+/**
+ * Final standings, ordered by finish. TSH writes these as an ordered map, so
+ * slot 1 is the winner and the placement each position earns is derived from
+ * its index rather than stored.
+ */
+function top8Standings(): Record<string, unknown> {
+  const finishers: [string, { code: string; asset: string } | undefined][] = [
+    ['Kestrel', FLAG_US],
+    ['Pike', FLAG_MX],
+    ['Ash', FLAG_JP],
+    ['Marbles', FLAG_MX],
+    ['Juno', FLAG_US],
+    ['Nine', FLAG_US],
+    ['Sable', undefined],
+    ['Wren', FLAG_JP],
+  ];
+  const slot: Record<string, unknown> = {};
+  finishers.forEach(([name, country], i) => {
+    slot[String(i + 1)] = {
+      player: { '1': player({ name, ...(country ? { country } : {}) }) },
+    };
+  });
+  return { slot };
 }
 
 /**
@@ -201,7 +227,7 @@ function state(seed: StateSeed): Record<string, unknown> {
       ruleset: { name: 'Standard Ruleset', banCount: 3 },
     },
     commentary,
-    player_list: { slot: {} },
+    player_list: seed.playerList ?? { slot: {} },
     streamQueue: {},
   };
 }
@@ -356,6 +382,7 @@ export const SCENARIOS: readonly Scenario[] = [
     state: state({
       match: 'Winners Final',
       bracket: top8Bracket(),
+      playerList: top8Standings(),
       teams: [
         { score: 1, players: [{ name: 'Kestrel', country: FLAG_US, seed: 1 }] },
         { score: 1, players: [{ name: 'Pike', country: FLAG_MX, seed: 4 }] },

@@ -10,63 +10,10 @@
 
 import { describe, expect, it } from 'vitest';
 import { COMPONENTS_CSS, COMPONENTS_RUNTIME } from './runtime';
+import { loadRuntime, renderComponent } from './runtimeHarness';
 
-/* ── Harness ────────────────────────────────────────────────────────────── */
-
-type Renderer = (
-  options: Record<string, unknown>,
-  event: { data: unknown },
-) => Promise<string | { html: string; afterMount: unknown }>;
-
-/**
- * Evaluate the runtime with just enough globals to exercise a renderer.
- * `afterMount` is never invoked here — it measures real layout boxes, which
- * only a browser can supply.
- */
-function loadRuntime(): Record<string, Renderer> {
-  const globals: Record<string, unknown> = {
-    // The runtime reads values through lodash `get`; this covers the paths it uses.
-    _: {
-      get(object: unknown, path: string | string[], fallback?: unknown) {
-        const parts = Array.isArray(path) ? path : path.split('.');
-        let cursor: unknown = object;
-        for (const part of parts) {
-          if (cursor === null || typeof cursor !== 'object') return fallback;
-          cursor = (cursor as Record<string, unknown>)[part];
-        }
-        return cursor === undefined ? fallback : cursor;
-      },
-    },
-    Transcript: async (text: string) => text,
-    CharacterDisplay: async () => undefined,
-    gsap: { fromTo: () => undefined },
-    $: () => ({ get: () => null, find: () => ({ each: () => undefined }) }),
-    ResizeObserver: undefined,
-    console: { warn: () => undefined, error: () => undefined, log: () => undefined },
-  };
-
-  const window: Record<string, unknown> = { scoreboardNumber: 1 };
-  const factory = new Function(
-    'window',
-    ...Object.keys(globals),
-    `${COMPONENTS_RUNTIME}\nreturn window.TSHComponents;`,
-  );
-  const api = factory(window, ...Object.values(globals)) as {
-    renderers: Record<string, Renderer>;
-  };
-  return api.renderers;
-}
-
-async function renderBracket(
-  data: unknown,
-  options: Record<string, unknown> = {},
-): Promise<string> {
-  const renderers = loadRuntime();
-  const bracket = renderers['bracket'];
-  if (!bracket) throw new Error('bracket renderer missing');
-  const result = await bracket(options, { data });
-  return typeof result === 'string' ? result : result.html;
-}
+const renderBracket = (data: unknown, options: Record<string, unknown> = {}) =>
+  renderComponent('bracket', data, options);
 
 /* ── Fixture ────────────────────────────────────────────────────────────── */
 
@@ -182,6 +129,27 @@ describe('component runtime source', () => {
       expect(renderers[def.kind], `missing renderer: ${def.kind}`).toBeTypeOf(
         'function',
       );
+    }
+  });
+
+  it('keeps the unimplemented list in step with the renderers', async () => {
+    // Implementing a component means deleting its placeholder *and* removing
+    // it from this set. Missing the second step makes exports warn about a
+    // component that works; missing the first hides a broken one.
+    const renderers = loadRuntime();
+    const { COMPONENTS } = await import('../model/components');
+    const { UNIMPLEMENTED_COMPONENTS } = await import('./runtime');
+
+    for (const def of COMPONENTS) {
+      const renderer = renderers[def.kind];
+      if (!renderer) continue;
+      const result = await renderer({}, { data: {} });
+      const html = typeof result === 'string' ? result : result.html;
+      const isPlaceholder = html.includes('component_placeholder');
+      expect(
+        isPlaceholder,
+        `${def.kind}: placeholder=${isPlaceholder}, listed=${UNIMPLEMENTED_COMPONENTS.has(def.kind)}`,
+      ).toBe(UNIMPLEMENTED_COMPONENTS.has(def.kind));
     }
   });
 });

@@ -160,6 +160,7 @@ export type TemplateId =
   | 'blank'
   | 'scoreboard'
   | 'bracket'
+  | 'top_8'
   | 'commentators'
   | 'standings';
 
@@ -181,6 +182,12 @@ export const TEMPLATES: readonly TemplateDef[] = [
     label: 'Bracket',
     description:
       'Double-elimination tree with animated connectors, drawn from the current phase group.',
+  },
+  {
+    id: 'top_8',
+    label: 'Top 8',
+    description:
+      'Final placement podium, with the winner emphasised and tied placements numbered correctly.',
   },
   {
     id: 'commentators',
@@ -369,6 +376,8 @@ export function createLayoutFromTemplate(
       return scoreboardTemplate(layout);
     case 'bracket':
       return componentTemplate(layout, 'bracket');
+    case 'top_8':
+      return componentTemplate(layout, 'top_8');
     case 'commentators':
       return componentTemplate(layout, 'commentators');
     case 'standings':

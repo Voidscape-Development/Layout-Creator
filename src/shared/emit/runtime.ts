@@ -295,9 +295,9 @@ window.TSHComponents = (function () {
     const cells = [];
     for (let i = 0; i < max; i += 1) {
       cells.push(
-        '<div class="gallery_character" ' +
+        '<div class="gallery_character" data-tsh-character ' +
           'data-source="' + esc(source) + '" ' +
-          'data-slice_character="[' + i + "," + (i + 1) + ']"></div>'
+          'data-slice="[' + i + "," + (i + 1) + ']"></div>'
       );
     }
     return cells.join("");
@@ -598,6 +598,113 @@ window.TSHComponents = (function () {
     }
   }
 
+  /* ── Top 8 ───────────────────────────────────────────────
+
+     A placement grid, not a tree: it reads player_list.slot, which TSH
+     orders by finish, and labels each entrant with the placement that
+     position earns.
+
+     Placements are computed rather than looked up. The official layout
+     hardcodes [1,2,3,4,5,5,7,7,17,17,17,17,21,21,21,21] with a "TODO:
+     Standings formula" comment beside it, and that array is wrong past
+     8th — positions 9-12 place 9th, not 17th. It only shows in layouts
+     that display more than eight.
+
+     Markup: .top8_tier.tier_1|.tier_4|.tier_8 > .top8_entry
+               > .top8_place, .top8_name, .top8_flag, .top8_character
+     ─────────────────────────────────────────────────────── */
+
+  /**
+   * Placement earned by finishing in the nth position of a
+   * double-elimination bracket: 1, 2, 3, 4, 5, 5, 7, 7, 9x4, 13x4, 17x8...
+   * Tied positions all take the placement of their block's first slot.
+   */
+  function doubleElimPlacement(index) {
+    if (index < 4) return index + 1;
+    let start = 4;
+    let size = 2;
+    let block = 0;
+    // Block sizes double every second block, which is what produces the
+    // 5,5,7,7 then 9,9,9,9 then 13,13,13,13 shape.
+    while (start < 1e6) {
+      if (index < start + size) return start + 1;
+      start += size;
+      block += 1;
+      if (block % 2 === 0) size *= 2;
+    }
+    return start + 1;
+  }
+
+  /** Single elimination ties every loser of a round: 1, 2, 3x2, 5x4, 9x8... */
+  function singleElimPlacement(index) {
+    if (index < 2) return index + 1;
+    let start = 2;
+    let size = 2;
+    while (start < 1e6) {
+      if (index < start + size) return start + 1;
+      start += size;
+      size *= 2;
+    }
+    return start + 1;
+  }
+
+  renderers.top_8 = async function (options, event) {
+    const data = event.data;
+    const slots = _.get(data, "player_list.slot", {});
+    const keys = Object.keys(slots);
+    if (!keys.length) return "";
+
+    const count = Number(options.count) || 8;
+    const sameSize = Boolean(options.sameSize);
+    const placementFor = options.singleElim
+      ? singleElimPlacement
+      : doubleElimPlacement;
+
+    // Without sameSize the grid is tiered: the winner gets its own row, the
+    // next three share one, and the rest share a third.
+    const tiers = { 1: [], 4: [], 8: [] };
+
+    for (let i = 0; i < Math.min(keys.length, count); i += 1) {
+      const key = keys[i];
+      const slot = slots[key];
+      if (!slot) continue;
+
+      const parts = [
+        field("top8_place", placementFor(i)),
+        field("top8_name", await teamName(slot), { raw: true }),
+      ];
+
+      if (options.showFlags !== false) {
+        const first = Object.values(slot.player || {})[0];
+        parts.push(assetImg("top8_flag", _.get(first, "country.asset")));
+      }
+      if (options.showCharacters !== false) {
+        parts.push(
+          '<div class="top8_character" data-tsh-character ' +
+            'data-source="player_list.slot.' + esc(key) + '"></div>'
+        );
+      }
+
+      const entry =
+        '<div class="top8_entry" data-place="' + placementFor(i) + '">' +
+        parts.join("") +
+        "</div>";
+
+      if (sameSize) tiers[8].push(entry);
+      else if (i === 0) tiers[1].push(entry);
+      else if (i < 4) tiers[4].push(entry);
+      else tiers[8].push(entry);
+    }
+
+    let html = "";
+    for (const tier of [1, 4, 8]) {
+      if (!tiers[tier].length) continue;
+      html +=
+        '<div class="top8_tier tier_' + tier + '">' + tiers[tier].join("") + "</div>";
+    }
+    return html;
+  };
+
   /* ── Not yet implemented ─────────────────────────────────
      These need their own generation logic (Leaflet for the map,
      ruleset-driven strike state). They render a visible placeholder so a
@@ -617,9 +724,37 @@ window.TSHComponents = (function () {
     };
   }
 
-  renderers.top_8 = placeholder("Top 8");
   renderers.stage_strike = placeholder("Stage striking");
   renderers.map = placeholder("Entrant map");
+
+  /**
+   * Any generated cell can opt into character art by carrying a data-source.
+   * Keyed off the attribute rather than a component-specific class so every
+   * component gets this for free.
+   */
+  function mountCharacters(host, event) {
+    const cells = host.querySelectorAll("[data-tsh-character]");
+    for (const cell of cells) {
+      const source = cell.getAttribute("data-source");
+      if (!source) continue;
+      let slice;
+      try {
+        slice = JSON.parse(cell.getAttribute("data-slice") || "null") || undefined;
+      } catch (e) {
+        slice = undefined;
+      }
+      CharacterDisplay(
+        $(cell),
+        {
+          source: source,
+          slice_character: slice,
+          scale_fill_x: true,
+          scale_fill_y: true,
+        },
+        event
+      );
+    }
+  }
 
   /* ── Dispatch ───────────────────────────────────────────── */
 
@@ -685,24 +820,7 @@ window.TSHComponents = (function () {
       }
     }
 
-    // Character cells declare their settings as data attributes; hand them to
-    // the shared CharacterDisplay pipeline once they exist in the DOM.
-    $host.find(".gallery_character").each(function (_i, cell) {
-      const $cell = $(cell);
-      const source = $cell.attr("data-source");
-      if (!source) return;
-      let slice = undefined;
-      try {
-        slice = JSON.parse($cell.attr("data-slice_character") || "null") || undefined;
-      } catch (e) {
-        slice = undefined;
-      }
-      CharacterDisplay(
-        $cell,
-        { source: source, slice_character: slice, scale_fill_x: true, scale_fill_y: true },
-        event
-      );
-    });
+    mountCharacters(host, event);
   }
 
   return { render: render, renderers: renderers };
@@ -819,6 +937,93 @@ export const COMPONENTS_CSS = String.raw`/* ════════════
 .standing_row > *:has(.text_empty),
 .player_cell > *:has(.text_empty),
 .commentator > *:has(.text_empty) {
+  display: none;
+}
+
+/* ── Top 8 ─────────────────────────────────────────────── */
+
+.component_top_8 {
+  --top8-gap: 12px;
+  /* Upper bound on a card. Without it a tier holding a single entrant — the
+     winner's row — stretches that one card across the whole width. */
+  --top8-entry-max: 420px;
+
+  display: flex;
+  flex-direction: column;
+  gap: var(--top8-gap);
+}
+
+.top8_tier {
+  display: flex;
+  flex-direction: row;
+  justify-content: center;
+  gap: var(--top8-gap);
+  /* Tiers share the height in proportion to their importance: the winner's
+     row is twice a mid-tier row, which is what makes the grid read as a
+     podium rather than a list. */
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.top8_tier.tier_1 {
+  flex-grow: 1.5;
+}
+
+.top8_entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex: 1 1 0;
+  min-width: 0;
+  max-width: var(--top8-entry-max);
+  padding: 8px;
+  border-radius: var(--border-radius);
+  background: var(--bg-color);
+  color: var(--text-color);
+  overflow: hidden;
+}
+
+/* First place carries the accent so it reads at a glance. */
+.top8_tier.tier_1 .top8_entry {
+  border: 2px solid var(--p1-score-bg-color);
+}
+
+.top8_place {
+  font-weight: 700;
+  font-size: 1.6em;
+  line-height: 1;
+  color: var(--p1-score-bg-color);
+}
+
+.top8_tier.tier_8 .top8_place {
+  font-size: 1.2em;
+}
+
+.top8_name {
+  max-width: 100%;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.top8_flag {
+  height: 1.1em;
+}
+
+.top8_flag img {
+  height: 100%;
+  width: auto;
+  display: block;
+}
+
+.top8_character {
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
+}
+
+.top8_entry > *:has(.text_empty) {
   display: none;
 }
 
@@ -971,4 +1176,4 @@ export const COMPONENTS_CSS = String.raw`/* ════════════
 `;
 
 /** Components whose runtime renders a placeholder rather than real output. */
-export const UNIMPLEMENTED_COMPONENTS = new Set(['top_8', 'stage_strike', 'map']);
+export const UNIMPLEMENTED_COMPONENTS = new Set(['stage_strike', 'map']);
