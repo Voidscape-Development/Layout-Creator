@@ -1,5 +1,7 @@
 # Layout Creator
 
+[![CI](https://github.com/Voidscape-Development/Layout-Creator/actions/workflows/ci.yml/badge.svg)](https://github.com/Voidscape-Development/Layout-Creator/actions/workflows/ci.yml)
+
 A visual layout creator for [TournamentStreamHelper](https://github.com/joaorb64/TournamentStreamHelper)
 overlays — build new layouts, restyle existing ones, and write them straight
 into your TSH install.
@@ -72,13 +74,38 @@ The app looks for your TournamentStreamHelper folder on launch. If it can't
 find it, use **Locate it** in the banner — it needs the folder containing
 `layout/include/globals.js`.
 
+Node 20.19 or newer. CI builds on Node 22.
+
 ### Other commands
 
 ```bash
 npm run build      # typecheck and bundle
-npm test           # emitter tests
+npm test           # emitter, import and component tests
 npm run dist       # package an installer for the current platform
 ```
+
+## CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs two jobs.
+
+**check** — on every push and pull request: `npm ci`, typecheck, tests, and a
+bundle build. `npm ci` installs exactly the committed lockfile, so a
+`package.json` change without a matching lockfile update fails here.
+
+**package** — on pushes to `main`, on `v*` tags, and on manual dispatch:
+builds installers on Linux, Windows and macOS and uploads each as a workflow
+artifact (AppImage, NSIS `.exe`, `.dmg`). Pull requests stop at `check`,
+because packaging spins up three runners and pulls a ~100MB Electron binary
+for each.
+
+The pipeline deliberately **does not publish**. `--publish never` is passed
+explicitly so that a tag build produces artifacts without creating a GitHub
+release.
+
+Neither job signs the application: macOS packaging runs with
+`CSC_IDENTITY_AUTO_DISCOVERY=false`, so the `.dmg` is unsigned and will need
+Gatekeeper to be bypassed on first launch. The app also has no icon yet, so
+electron-builder falls back to the default Electron one.
 
 ## Exporting
 

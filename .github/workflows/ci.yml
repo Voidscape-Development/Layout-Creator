@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the in-flight run redundant. Tags are
+# excluded from cancellation — a release build should always finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  check:
+    name: Typecheck, test and build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      # `npm ci` rather than `npm install`: it installs exactly the committed
+      # lockfile and fails if the two have drifted.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      # Builds the main, preload and renderer bundles. This is what packaging
+      # consumes, so a failure here means there is nothing to package.
+      - name: Build
+        run: npm run build
+
+  package:
+    name: Package (${{ matrix.label }})
+    needs: check
+    # Packaging spins up three runners and downloads a ~100MB Electron binary
+    # per platform, so pull requests stop at `check`. Pushes to main, tags and
+    # manual runs get the full matrix.
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # One platform failing shouldn't hide the results for the other two.
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: linux
+            flag: --linux
+            artifact: release/*.AppImage
+          - os: windows-latest
+            label: windows
+            flag: --win
+            artifact: release/*.exe
+          - os: macos-latest
+            label: macos
+            flag: --mac
+            artifact: release/*.dmg
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Package
+        # `--publish never` is load-bearing: it stops electron-builder
+        # attempting a GitHub release on tag builds. Publishing is deliberately
+        # not part of this pipeline.
+        run: npx electron-builder ${{ matrix.flag }} --publish never
+        env:
+          # No signing certificates in CI. Without this, electron-builder
+          # searches the keychain for an identity and fails the macOS build.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: tsh-layout-creator-${{ matrix.label }}
+          path: ${{ matrix.artifact }}
+          # The unpacked app directory sits alongside the installer and is far
+          # larger, so only the installer itself is uploaded.
+          if-no-files-found: error
+          retention-days: 14

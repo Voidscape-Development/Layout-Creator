@@ -4,6 +4,9 @@
   "description": "Visual layout creator for TournamentStreamHelper overlays",
   "author": "Voidscape Development",
   "license": "MIT",
+  "engines": {
+    "node": ">=20.19"
+  },
   "main": "./out/main/index.js",
   "type": "module",
   "scripts": {
