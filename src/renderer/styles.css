@@ -1,0 +1,506 @@
+/* ═══════════════════════════════════════════════════════════
+   TSH Layout Creator — editor chrome
+   Dark by default: this app sits next to OBS during an event,
+   and a bright panel next to a dark preview makes it much
+   harder to judge the overlay you're actually designing.
+   ═══════════════════════════════════════════════════════════ */
+
+:root {
+  --ui-bg: #14131c;
+  --ui-panel: #1c1b26;
+  --ui-panel-alt: #23222f;
+  --ui-border: #32303f;
+  --ui-text: #e8e6f0;
+  --ui-text-dim: #9b97ad;
+  --ui-accent: #7c6cff;
+  --ui-accent-dim: #4a3fa8;
+  --ui-danger: #e05563;
+  --ui-warn: #e0a355;
+  --ui-ok: #4fc08d;
+  --ui-radius: 6px;
+  --ui-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --ui-mono: 'SF Mono', 'Cascadia Mono', Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--ui-bg);
+  color: var(--ui-text);
+  font-family: var(--ui-font);
+  font-size: 13px;
+  overflow: hidden;
+  /* The editor is a fixed-pane app; stray text selection while dragging on
+     the canvas is noise, so it's opt-in per element instead. */
+  user-select: none;
+}
+
+input,
+textarea,
+select,
+button {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+/* ── App shell ───────────────────────────────────────────── */
+
+.app {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100%;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 250px 1fr 320px;
+  min-height: 0;
+}
+
+.pane {
+  background: var(--ui-panel);
+  border-right: 1px solid var(--ui-border);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.pane--right {
+  border-right: none;
+  border-left: 1px solid var(--ui-border);
+}
+
+.pane__scroll {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--ui-panel-alt);
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.toolbar__title {
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.toolbar__spacer {
+  flex: 1;
+}
+
+.toolbar__status {
+  color: var(--ui-text-dim);
+  font-size: 12px;
+}
+
+/* ── Controls ────────────────────────────────────────────── */
+
+.btn {
+  background: var(--ui-panel-alt);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: 5px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn:hover:not(:disabled) {
+  background: var(--ui-border);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.btn--primary {
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: #fff;
+}
+
+.btn--primary:hover:not(:disabled) {
+  background: var(--ui-accent-dim);
+}
+
+.btn--danger {
+  color: var(--ui-danger);
+}
+
+.btn--sm {
+  padding: 3px 7px;
+  font-size: 12px;
+}
+
+.input,
+.select,
+.textarea {
+  width: 100%;
+  background: var(--ui-bg);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--ui-radius);
+  padding: 5px 7px;
+  user-select: text;
+}
+
+.input:focus,
+.select:focus,
+.textarea:focus {
+  outline: 1px solid var(--ui-accent);
+  border-color: var(--ui-accent);
+}
+
+.textarea {
+  font-family: var(--ui-mono);
+  font-size: 12px;
+  resize: vertical;
+  min-height: 70px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+}
+
+.checkbox input {
+  accent-color: var(--ui-accent);
+}
+
+/* ── Sections and fields ─────────────────────────────────── */
+
+.section {
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.section__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  text-align: left;
+}
+
+.section__head:hover {
+  background: var(--ui-panel-alt);
+}
+
+.section__chevron {
+  color: var(--ui-text-dim);
+  font-size: 10px;
+  width: 10px;
+}
+
+.section__body {
+  padding: 4px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.field {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  align-items: center;
+  gap: 8px;
+}
+
+.field__label {
+  color: var(--ui-text-dim);
+  font-size: 12px;
+}
+
+.field__label--advanced {
+  font-family: var(--ui-mono);
+  font-size: 11px;
+}
+
+.field--stacked {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+}
+
+.field__help {
+  grid-column: 1 / -1;
+  color: var(--ui-text-dim);
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.row--wrap {
+  flex-wrap: wrap;
+}
+
+/* ── Lists ───────────────────────────────────────────────── */
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.list__item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+}
+
+.list__item:hover {
+  background: var(--ui-panel-alt);
+}
+
+.list__item--selected {
+  background: var(--ui-panel-alt);
+  border-left-color: var(--ui-accent);
+}
+
+.list__item--muted {
+  color: var(--ui-text-dim);
+}
+
+.list__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.list__badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ui-text-dim);
+  border: 1px solid var(--ui-border);
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* ── Canvas ──────────────────────────────────────────────── */
+
+.canvas-area {
+  position: relative;
+  overflow: auto;
+  background:
+    repeating-conic-gradient(#1a1924 0% 25%, #16151f 0% 50%) 50% / 20px 20px;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+
+.canvas-stage {
+  position: relative;
+  transform-origin: center center;
+  /* The checkerboard shows through anywhere the layout is transparent, which
+     is what an OBS browser source actually composites over. */
+  box-shadow: 0 0 0 1px var(--ui-border), 0 8px 40px rgba(0, 0, 0, 0.5);
+}
+
+.canvas-node {
+  /* Positioning comes entirely from the emitted style so the canvas and the
+     exported CSS cannot drift. */
+  pointer-events: auto;
+}
+
+.canvas-node--selected {
+  outline: 1px solid var(--ui-accent);
+  outline-offset: 0;
+}
+
+.canvas-node--hovered {
+  outline: 1px dashed var(--ui-accent-dim);
+}
+
+.canvas-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: var(--ui-accent);
+  border: 1px solid #fff;
+  border-radius: 2px;
+  z-index: 999999;
+}
+
+.canvas-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+}
+
+.canvas-wrap {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ── Timeline ────────────────────────────────────────────── */
+
+.timeline {
+  border-top: 1px solid var(--ui-border);
+  background: var(--ui-panel);
+  padding: 8px 12px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.timeline__track {
+  position: relative;
+  height: 22px;
+  background: var(--ui-bg);
+  border-radius: 3px;
+  margin: 3px 0;
+}
+
+.timeline__bar {
+  position: absolute;
+  top: 3px;
+  height: 16px;
+  background: var(--ui-accent-dim);
+  border: 1px solid var(--ui-accent);
+  border-radius: 3px;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 4px;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: grab;
+}
+
+.timeline__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--ui-danger);
+  pointer-events: none;
+}
+
+/* ── Misc ────────────────────────────────────────────────── */
+
+.empty {
+  padding: 24px 16px;
+  color: var(--ui-text-dim);
+  text-align: center;
+  line-height: 1.6;
+}
+
+.banner {
+  padding: 8px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+  border-bottom: 1px solid var(--ui-border);
+}
+
+.banner--warn {
+  background: rgba(224, 163, 85, 0.12);
+  color: var(--ui-warn);
+}
+
+.banner--info {
+  background: rgba(124, 108, 255, 0.12);
+  color: var(--ui-text-dim);
+}
+
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--ui-border);
+  flex-shrink: 0;
+  cursor: pointer;
+  padding: 0;
+  background-clip: padding-box;
+}
+
+.tag {
+  font-size: 11px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: var(--ui-panel-alt);
+  border: 1px solid var(--ui-border);
+  color: var(--ui-text-dim);
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: var(--ui-panel);
+  border: 1px solid var(--ui-border);
+  border-radius: 10px;
+  padding: 20px;
+  width: 460px;
+  max-height: 80vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.hint {
+  color: var(--ui-text-dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.mono {
+  font-family: var(--ui-mono);
+  font-size: 11px;
+  user-select: text;
+}
