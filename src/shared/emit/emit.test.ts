@@ -351,11 +351,29 @@ describe('Pack emitter', () => {
   });
 
   it('warns about components whose runtime is still a placeholder', () => {
+    const layout = emptyLayout('Map', 'map_test');
+    layout.root.children.push(createComponent('map'));
+    const pack = packWith(layout);
+
+    expect(emitPack(pack).warnings.join(' ')).toContain('not implemented');
+  });
+
+  it('does not warn about implemented components', () => {
     const layout = emptyLayout('Bracket', 'bracket_test');
     layout.root.children.push(createComponent('bracket'));
     const pack = packWith(layout);
 
-    expect(emitPack(pack).warnings.join(' ')).toContain('not implemented');
+    expect(emitPack(pack).warnings.join(' ')).not.toContain('not implemented');
+  });
+
+  it('ships the component runtime and its default styles when one is used', () => {
+    const layout = emptyLayout('Bracket', 'bracket_test');
+    layout.root.children.push(createComponent('bracket'));
+    const pack = packWith(layout);
+
+    const paths = emitPack(pack).files.map((f) => f.path);
+    expect(paths).toContain('_packs/test_pack/components.js');
+    expect(paths).toContain('_packs/test_pack/components.css');
   });
 
   it('preserves an imported layout and rewrites only its :root block', () => {

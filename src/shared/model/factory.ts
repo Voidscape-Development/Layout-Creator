@@ -156,7 +156,12 @@ export function createNode(type: LayoutNode['type']): LayoutNode {
 
 /* ── Templates ──────────────────────────────────────────────────────────── */
 
-export type TemplateId = 'blank' | 'scoreboard' | 'commentators' | 'standings';
+export type TemplateId =
+  | 'blank'
+  | 'scoreboard'
+  | 'bracket'
+  | 'commentators'
+  | 'standings';
 
 export interface TemplateDef {
   id: TemplateId;
@@ -170,6 +175,12 @@ export const TEMPLATES: readonly TemplateDef[] = [
     label: 'Two-player scoreboard',
     description:
       'Player containers with name, score, character and flag chips, positioned in Stack mode so empty fields collapse cleanly.',
+  },
+  {
+    id: 'bracket',
+    label: 'Bracket',
+    description:
+      'Double-elimination tree with animated connectors, drawn from the current phase group.',
   },
   {
     id: 'commentators',
@@ -356,6 +367,8 @@ export function createLayoutFromTemplate(
   switch (template) {
     case 'scoreboard':
       return scoreboardTemplate(layout);
+    case 'bracket':
+      return componentTemplate(layout, 'bracket');
     case 'commentators':
       return componentTemplate(layout, 'commentators');
     case 'standings':

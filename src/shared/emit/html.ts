@@ -116,8 +116,13 @@ export function emitHtml(
   const themeHref = `${options.packAssetPath}/theme.css`;
   // The component runtime must be in place before index.js runs its first
   // Update(), so it loads in <head> alongside globals.js.
-  const componentsTag = usesComponents(layout)
+  const usesAny = usesComponents(layout);
+  const componentsTag = usesAny
     ? `\n    <script src="${escapeHtml(`${options.packAssetPath}/components.js`)}"></script>`
+    : '';
+  // Loaded before ./index.css so a layout's own rules override the defaults.
+  const componentsCssTag = usesAny
+    ? `\n    <link rel="stylesheet" href="${escapeHtml(`${options.packAssetPath}/components.css`)}" />`
     : '';
 
   return `<!doctype html>
@@ -127,7 +132,7 @@ export function emitHtml(
     <title>${escapeHtml(`${pack.name} — ${layout.name}${variant.bodyClass ? ` (${variant.name})` : ''}`)}</title>
     <script src="../include/globals.js"></script>${componentsTag}
     <link rel="stylesheet" href="../main.css" />
-    <link rel="stylesheet" href="${escapeHtml(themeHref)}" />
+    <link rel="stylesheet" href="${escapeHtml(themeHref)}" />${componentsCssTag}
     <link rel="stylesheet" href="./index.css" />
   </head>
   <body${bodyClass}>

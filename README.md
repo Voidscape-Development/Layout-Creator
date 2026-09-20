@@ -5,8 +5,8 @@ overlays — build new layouts, restyle existing ones, and write them straight
 into your TSH install.
 
 > **Status: early.** The editor, emitters, import and export all work end to
-> end. Four of the ten smart components still render placeholders. See
-> [docs/DESIGN.md](docs/DESIGN.md#7-status) for exactly what is and isn't done.
+> end. Three of the ten smart components still render placeholders. See
+> [docs/DESIGN.md](docs/DESIGN.md#8-status) for exactly what is and isn't done.
 
 ## What it does
 
@@ -21,8 +21,11 @@ into your TSH install.
   one script, several skins switched by a body class.
 - **GSAP animation** from presets — rise in, slide in, stagger — with a
   timeline strip for ordering, and a raw-vars escape hatch.
-- **Smart components** for the data-driven layouts: set lists, stream queues,
-  standings, commentators, player lists, character galleries.
+- **Smart components** for the data-driven layouts: brackets, set lists,
+  stream queues, standings, commentators, player lists, character galleries.
+  The bracket draws a full double-elimination tree with measured SVG
+  connectors, handles byes and undecided slots, and hides the grand final
+  reset until it's actually forced.
 - **Readable output.** Emitted HTML, CSS and JS follow the conventions of the
   official layouts and are meant to be hand-edited afterwards. You can watch
   them being generated in the Code tab as you work.

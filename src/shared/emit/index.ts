@@ -25,7 +25,11 @@ import { sanitizeFolderName } from '../model/pack';
 import { emitCss } from './css';
 import { emitHtml, usesComponents } from './html';
 import { emitJs } from './js';
-import { COMPONENTS_RUNTIME, UNIMPLEMENTED_COMPONENTS } from './runtime';
+import {
+  COMPONENTS_CSS,
+  COMPONENTS_RUNTIME,
+  UNIMPLEMENTED_COMPONENTS,
+} from './runtime';
 import { emitThemeCss } from './theme';
 import { walk } from '../model/nodes';
 import { analyzeCss, applyEdits } from '../import/css';
@@ -269,6 +273,13 @@ export function emitPack(pack: Pack): EmitResult {
       contents: COMPONENTS_RUNTIME,
       kind: 'js',
     });
+    // Components generate their own DOM, so they ship their own baseline
+    // styling — otherwise every user rebuilds the same rules by hand.
+    files.push({
+      path: `${folder}/components.css`,
+      contents: COMPONENTS_CSS,
+      kind: 'css',
+    });
   }
 
   const seenFolders = new Map<string, string>();
@@ -295,4 +306,4 @@ export { emitCss } from './css';
 export { emitHtml, usesComponents } from './html';
 export { emitJs } from './js';
 export { emitThemeCss } from './theme';
-export { COMPONENTS_RUNTIME, UNIMPLEMENTED_COMPONENTS } from './runtime';
+export { COMPONENTS_CSS, COMPONENTS_RUNTIME, UNIMPLEMENTED_COMPONENTS } from './runtime';

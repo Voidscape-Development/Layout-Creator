@@ -186,7 +186,73 @@ Variants come from the HTML files, with body classes read from source, so
 
 ---
 
-## 5. Architecture
+## 5. The bracket component
+
+The first data-driven component with real generation logic, and the one that
+set the shape for the rest.
+
+### Slot ids carry meaning
+
+TSH encodes bracket structure in the entrant ids, not in separate flags:
+
+| `playerId[n]` | Meaning | Handling |
+| --- | --- | --- |
+| a real id | An entrant | Looked up in `bracket.players.slot` |
+| `-1` | Empty slot | The set is a bye and is **not drawn at all** |
+| `-2` | Undecided | Drawn as a dimmed *TBD* row |
+
+Getting this wrong is what makes a bracket overlay look broken: render the
+byes and a 6-entrant top 8 sprouts phantom matches.
+
+### The grand final reset
+
+Rounds are signed — positive for winners, negative for losers. When
+`progressionsOut` is 0 the highest winners round is the grand final *reset*,
+which only happens if the losers-side entrant wins the grand final.
+
+Showing it unconditionally invents a set that may never be played. Hiding it
+unconditionally drops the set currently on stream. So it is drawn only once
+the grand final is complete and `score[1] > score[0]`.
+
+### Connectors have to be measured
+
+A connector's path cannot be computed from the data. Where a set box lands
+depends on how the browser distributed it down its column, so the component
+mounts its markup, waits a frame, measures with `getBoundingClientRect()`, and
+only then generates the SVG elbows. A `ResizeObserver` redraws them when the
+host changes size.
+
+This is why the runtime's dispatcher accepts `{ html, afterMount }` as well as
+a plain HTML string — components that measure themselves need a hook after the
+browser has laid them out.
+
+### Two layout bugs worth recording
+
+Both were caught by rendering the component in a real browser, and neither
+would have shown up in a string-comparison test:
+
+1. **The round label was a flex child of its column.** With
+   `justify-content: space-around` the browser distributed the *label* along
+   with the sets, pushing every set off the position its connector expected.
+   Sets now live in an inner `.bracket_sets` container and the label is a
+   fixed header outside it.
+2. **Set boxes filled their whole column.** Rounds share the width evenly, so
+   a short bracket stretched each box across hundreds of pixels and stranded
+   the score at the far end of an empty bar. Boxes are now capped by
+   `--bracket-set-width` and hug the left of their column, leaving the
+   remainder as the gutter connectors elbow through.
+
+### Component default styles
+
+Components generate their own DOM, so they now ship `components.css` beside
+`components.js` — emitted once per pack and linked *before* the layout's own
+stylesheet so a layout always overrides it. Every rule is a single class for
+the same reason. Before this, generated markup had no styling at all and every
+user would have rebuilt the same baseline by hand.
+
+---
+
+## 6. Architecture
 
 ```
 electron/
@@ -240,7 +306,7 @@ containing nothing but keys we would have written.
 
 ---
 
-## 6. Token layering
+## 7. Token layering
 
 Three layers, later winning:
 
@@ -258,7 +324,7 @@ emits nothing.
 
 ---
 
-## 7. Status
+## 8. Status
 
 ### Working
 
@@ -274,20 +340,23 @@ emits nothing.
 - Six mock scenarios including overlong names, Japanese names and missing data
 - Layout import: browse the TSH install, import with variants and canvas
   detected, retheme via variables, colour promotion and font swaps
-- 52 tests — emitter (including parse-checks on all generated JavaScript) and
-  import (including byte-identical round-trip)
+- Bracket component: signed rounds, byes, TBD slots, grand-final reset,
+  measured SVG connectors, auto-fit row heights
+- Component default styles shipped as `components.css`
+- 74 tests — emitter (parse-checks on all generated JavaScript), import
+  (byte-identical round-trip) and bracket (the runtime evaluated and driven
+  against TSH-shaped data)
 
 ### Components
 
 | Implemented | Placeholder |
 | --- | --- |
-| `set_list`, `stream_queue`, `top_n_list`, `commentators`, `player_list`, `character_gallery` | `bracket`, `top_8`, `stage_strike`, `map` |
+| `bracket`, `set_list`, `stream_queue`, `top_n_list`, `commentators`, `player_list`, `character_gallery` | `top_8`, `stage_strike`, `map` |
 
-The four placeholders render a visible "not implemented yet" box and log a
+The three placeholders render a visible "not implemented yet" box and log a
 console warning, and exporting a layout that uses one produces an export
-warning. They need genuine generation logic — SVG connector routing for
-brackets, ruleset-driven strike state, Leaflet for the map — rather than
-another options form.
+warning. They need genuine generation logic — ruleset-driven strike state,
+Leaflet for the map — rather than another options form.
 
 ### Not built yet
 
@@ -312,11 +381,11 @@ another options form.
 
 ---
 
-## 8. Roadmap
+## 9. Roadmap
 
-1. **Bracket component** — the most-requested data-driven layout.
-2. **Live preview window** against a running TSH.
-3. **Remaining components** — top 8, stage striking, map.
+1. **Live preview window** against a running TSH.
+2. **Remaining components** — top 8, stage striking, map. Top 8 can reuse most
+   of the bracket's measurement and slot handling.
 4. **Import: animation parameters.** Durations and eases could be substituted
    the same way colours are, by span. Deferred because GSAP call sites vary
    more than CSS values do, and a bad substitution breaks a script rather than

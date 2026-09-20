@@ -79,6 +79,86 @@ interface StateSeed {
   entrants?: number;
   teams: [TeamSeed, TeamSeed];
   commentary?: { name: string; pronoun?: string; twitter?: string; real_name?: string }[];
+  bracket?: Record<string, unknown>;
+}
+
+/* ── Bracket ────────────────────────────────────────────────────────────── */
+
+function emptyBracket(): Record<string, unknown> {
+  return {
+    players: { slot: {} },
+    bracket: { rounds: {}, progressionsIn: 0, progressionsOut: 0 },
+  };
+}
+
+function bracketPlayer(name: string, country?: { code: string; asset: string }) {
+  return { player: { '1': player({ name, ...(country ? { country } : {}) }) } };
+}
+
+/**
+ * A top-8 double-elimination phase, shaped the way TSH writes it.
+ *
+ * Round keys are signed — positive for winners, negative for losers. Slot ids
+ * of -1 mark a bye and -2 an entrant not yet decided. Round 4 here is the
+ * grand final reset, which stays hidden until the losers-side player forces it.
+ */
+function top8Bracket(): Record<string, unknown> {
+  return {
+    phase: 'Top 8',
+    phaseGroup: 'A',
+    players: {
+      slot: {
+        '1': bracketPlayer('Kestrel', FLAG_US),
+        '2': bracketPlayer('Marbles', FLAG_MX),
+        '3': bracketPlayer('Juno', FLAG_US),
+        '4': bracketPlayer('Pike', FLAG_MX),
+        '5': bracketPlayer('Ash', FLAG_JP),
+        '6': bracketPlayer('Nine', FLAG_US),
+      },
+    },
+    bracket: {
+      progressionsIn: 0,
+      progressionsOut: 0,
+      winnersOnlyProgressions: false,
+      rounds: {
+        '1': {
+          name: 'Winners Semi-Final',
+          sets: {
+            '0': { playerId: [1, 3], score: [2, 1], completed: true, nextWin: [2, 0] },
+            '1': { playerId: [2, 4], score: [0, 2], completed: true, nextWin: [2, 0] },
+          },
+        },
+        '2': {
+          name: 'Winners Final',
+          sets: {
+            '0': { playerId: [1, 4], score: [1, 1], completed: false, nextWin: [3, 0] },
+          },
+        },
+        '-1': {
+          name: 'Losers Quarter-Final',
+          sets: {
+            '0': { playerId: [5, 6], score: [2, 0], completed: true, nextWin: [-2, 0] },
+          },
+        },
+        '-2': {
+          name: 'Losers Final',
+          sets: {
+            '0': { playerId: [5, 2], score: [0, 0], completed: false, nextWin: [3, 0] },
+          },
+        },
+        '3': {
+          name: 'Grand Final',
+          sets: {
+            '0': { playerId: [-2, -2], score: [0, 0], completed: false, nextWin: [4, 0] },
+          },
+        },
+        '4': {
+          name: 'Grand Final Reset',
+          sets: { '0': { playerId: [-2, -2], score: [0, 0], completed: false } },
+        },
+      },
+    },
+  };
 }
 
 function state(seed: StateSeed): Record<string, unknown> {
@@ -95,6 +175,7 @@ function state(seed: StateSeed): Record<string, unknown> {
   return {
     timestamp: Date.now(),
     game: { codename: 'ssbu', name: 'Super Smash Bros. Ultimate' },
+    bracket: seed.bracket ?? emptyBracket(),
     tournamentInfo: {
       tournamentName: seed.tournament ?? 'Voidscape Monthly #12',
       eventName: seed.event ?? 'Singles',
@@ -264,6 +345,20 @@ export const SCENARIOS: readonly Scenario[] = [
       teams: [
         { score: 0, players: [{ name: 'player one' }] },
         { score: 0, players: [{ name: 'p2' }] },
+      ],
+    }),
+  },
+  {
+    id: 'bracket',
+    label: 'Top 8 bracket',
+    description:
+      'A double-elimination phase with a live winners final, a losers side, and a grand final reset that stays hidden until it is forced.',
+    state: state({
+      match: 'Winners Final',
+      bracket: top8Bracket(),
+      teams: [
+        { score: 1, players: [{ name: 'Kestrel', country: FLAG_US, seed: 1 }] },
+        { score: 1, players: [{ name: 'Pike', country: FLAG_MX, seed: 4 }] },
       ],
     }),
   },
