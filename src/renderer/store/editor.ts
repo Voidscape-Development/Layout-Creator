@@ -107,7 +107,50 @@ function snapshot(pack: Pack): Pack {
   return structuredClone(pack);
 }
 
+/**
+ * Caches a derived value against the state references it was computed from.
+ *
+ * Components read derived state with `useEditor((s) => s.tokens())`, and
+ * zustand v5 subscribes through `useSyncExternalStore`, which compares
+ * snapshots by reference. A derived getter that builds a fresh object on every
+ * call therefore looks like a changed snapshot on every render, and React
+ * re-renders until it gives up with "Maximum update depth exceeded" — which
+ * unmounts the whole tree and leaves a blank window. Returning the previous
+ * value while the inputs are unchanged keeps those snapshots stable.
+ */
+function derived<Deps extends readonly unknown[], Value>(
+  compute: (...deps: Deps) => Value,
+): (...deps: Deps) => Value {
+  let last: { deps: Deps; value: Value } | undefined;
+  return (...deps: Deps): Value => {
+    if (
+      last &&
+      last.deps.length === deps.length &&
+      last.deps.every((dep, i) => Object.is(dep, deps[i]))
+    ) {
+      return last.value;
+    }
+    const value = compute(...deps);
+    last = { deps, value };
+    return value;
+  };
+}
+
 export const useEditor = create<EditorState>((set, get) => {
+  const computeTokens = derived(
+    (pack: Pack, layout: Layout | undefined, variant: Variant | undefined) =>
+      layout ? effectiveTokens(pack, layout, variant) : pack.theme,
+  );
+
+  const computeSelectedNodes = derived(
+    (layout: Layout | undefined, ids: string[]) =>
+      layout
+        ? ids
+            .map((id) => findNode(layout.root, id))
+            .filter((n): n is LayoutNode => Boolean(n))
+        : [],
+  );
+
   /** Apply a mutation to a cloned pack, pushing the old one onto the undo stack. */
   function commit(recipe: (pack: Pack) => void): void {
     const state = get();
@@ -156,18 +199,11 @@ export const useEditor = create<EditorState>((set, get) => {
     },
 
     selectedNodes() {
-      const layout = get().layout();
-      if (!layout) return [];
-      return get()
-        .selectedNodeIds.map((id) => findNode(layout.root, id))
-        .filter((n): n is LayoutNode => Boolean(n));
+      return computeSelectedNodes(get().layout(), get().selectedNodeIds);
     },
 
     tokens() {
-      const { pack } = get();
-      const layout = get().layout();
-      if (!layout) return pack.theme;
-      return effectiveTokens(pack, layout, get().variant());
+      return computeTokens(get().pack, get().layout(), get().variant());
     },
 
     // ── Pack ────────────────────────────────────────────────────────────
